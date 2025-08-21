@@ -53,7 +53,14 @@ from flask_cors import CORS
 # ---------------- App setup ----------------
 app = Flask(__name__, static_folder='static')
 app.url_map.strict_slashes = False
-CORS(app, resources={r"/*": {"origins": "*"}})  # open for dev; tighten in prod
+ALLOWED_ORIGINS = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "https://kaursimar9464.github.io",   # GitHub Pages
+    "https://simarpreet-kaur.com",       # your domain (if pointed to GH Pages)
+]
+CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
+
 
 # ---------------- Config ----------------
 URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"

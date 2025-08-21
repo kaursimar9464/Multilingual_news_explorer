@@ -69,8 +69,12 @@
   </main>
 
   <script>
-  const ENDPOINT = "";
-  const API_KEY  = ""; 
+  // If served from GitHub Pages or your domain, use PROD; otherwise use local Flask.
+  const PROD_ENDPOINT = "https://YOUR-API-URL-HERE"; // e.g. https://multinews.fly.dev
+  const ENDPOINT =
+    (location.hostname.endsWith("github.io") || location.hostname.endsWith("simarpreet-kaur.com"))
+      ? PROD_ENDPOINT
+      : "http://127.0.0.1:5000";
 
   const statusEl  = document.getElementById("status");
   const resultsEl = document.getElementById("results");
