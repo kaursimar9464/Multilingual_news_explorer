@@ -1,0 +1,12 @@
+# De-emphasize frontend from language stats
+#/static/**            linguist-vendored
+#/assets/**            linguist-vendored
+#docs/**               linguist-vendored
+
+*.html                linguist-documentation
+*.css                 linguist-vendored
+*.js                  linguist-vendored
+*.min.js              linguist-generated
+
+# (Not strictly needed, but explicit is nice)
+*.py                  linguist-detectable=true
