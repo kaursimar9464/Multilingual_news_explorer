@@ -48,7 +48,7 @@ PY
 
 # App files
 COPY multilingualnews.py .
-COPY static ./static
+
 
 EXPOSE 8080
 CMD ["gunicorn", "multilingualnews:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "2", "--timeout", "120"]

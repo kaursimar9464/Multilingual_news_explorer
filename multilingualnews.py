@@ -165,7 +165,7 @@ threading.Thread(target=bootstrap, daemon=True).start()
 
 @app.get("/")
 def root():
-    return jsonify({"service":"Multilingual News Explorer API","status":BOOT["state"]}), 200
+    return jsonify({"service":"Multilingual News Explorer API","status":"ok"}), 200
 
 @app.get("/health")
 def health():
