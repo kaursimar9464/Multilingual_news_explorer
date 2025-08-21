@@ -69,8 +69,8 @@
   </main>
 
   <script>
-  // If served from GitHub Pages or your domain, use PROD; otherwise use local Flask.
-  const PROD_ENDPOINT = "https://multilingualnews.fly.dev"; // e.g. https://multinews.fly.dev
+  
+  const PROD_ENDPOINT = "https://multilingualnews.fly.dev"; 
   const ENDPOINT = "https://multilingualnews.fly.dev";
   const API_KEY  = "";
   const statusEl  = document.getElementById("status");
@@ -80,9 +80,9 @@
   const input     = document.getElementById("query");
   const checkBtn  = document.getElementById("checkBtn");
   const mockTgl   = document.getElementById("mockToggle");
-  const langFilter = document.getElementById("langFilter");  // ⬅ NEW
+  const langFilter = document.getElementById("langFilter");  
 
-  let lastResults = []; // store raw results for filtering ⬅ NEW
+  let lastResults = []; 
 
   // Debug helpers
   function logDbg(...args) {

@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-# API-only: UI is on GitHub Pages.
+
 
 import os, json, re, html, time, threading, hashlib
 NLTK_DIR = os.environ.get("NLTK_DATA", "/usr/share/nltk_data")
@@ -8,7 +7,7 @@ os.makedirs(NLTK_DIR, exist_ok=True)
 import nltk
 nltk.data.path = [NLTK_DIR] + nltk.data.path
 
-# Make sure required resources exist; download if missing
+
 _needed = ["punkt", "wordnet", "omw-1.4", "stopwords"]
 for pkg in _needed:
     try:
@@ -37,7 +36,7 @@ CORS(app, resources={r"/*": {"origins": [
     "https://kaursimar9464.github.io",
 ]}})
 
-# Keep initial scope tiny to avoid OOM/timeouts; expand later.
+
 LOCALES = [
     ("en","US"),
     ("fr","FR"),
@@ -49,9 +48,9 @@ LOCALES = [
     ("ja","JP"),
 ]
 
-# Keep LANGUAGES in sync with LOCALES
+
 LANGUAGES = sorted({lang for (lang, _) in LOCALES})
-TOPICS  = []  # only top stories
+TOPICS  = [] 
 
 BOOT = {"state": "warming_up", "error": None}
 model = None
