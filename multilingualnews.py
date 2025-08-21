@@ -1,105 +1,50 @@
 # -*- coding: utf-8 -*-
-# Run locally:
-#   pip install -U flask flask-cors feedparser langdetect sentence-transformers torch
-#   python multilingualnews.py
-# In your index.html set: const ENDPOINT = "http://127.0.0.1:5000";
+# API-only: UI is on GitHub Pages.
 
-# --- Ensure NLTK corpora BEFORE importing nltk ---
-import os, sys, subprocess
-
-NLTK_DIR = os.environ.get("NLTK_DATA", "/opt/render/nltk_data")
-os.environ["NLTK_DATA"] = NLTK_DIR
-os.makedirs(NLTK_DIR, exist_ok=True)
-
-_needed = ["wordnet", "omw-1.4", "punkt", "stopwords"]
-try:
-    subprocess.run(
-        [sys.executable, "-m", "nltk.downloader", "-d", NLTK_DIR] + _needed,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-except Exception:
-    # ignore transient network errors; we'll second-chance below
-    pass
-
-import nltk
-nltk.data.path.append(NLTK_DIR)
-for pkg in _needed:
-    try:
-        subdir = "tokenizers" if pkg == "punkt" else "corpora"
-        nltk.data.find(f"{subdir}/{pkg}")
-    except LookupError:
-        nltk.download(pkg, download_dir=NLTK_DIR)
-
-# --- Standard imports ---
-import json
-import time
-import hashlib
-import re, html
-import numpy as np
+import os, json, re, html, time, threading, hashlib
 from datetime import datetime, timezone
-# from email.utils import parsedate_to_datetime  # (unused)
-# from lexrank import LexRank  # (comment out if unused)
+
+import numpy as np
+import requests, feedparser, nltk
 from nltk.tokenize import sent_tokenize
-import requests
-import feedparser
 from langdetect import detect, LangDetectException
 from sentence_transformers import SentenceTransformer, util
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# ---------------- App setup ----------------
-app = Flask(__name__, static_folder='static')
+NLTK_DIR = os.environ.get("NLTK_DATA", "/usr/share/nltk_data")
+os.makedirs(NLTK_DIR, exist_ok=True)
+nltk.data.path.append(NLTK_DIR)
+
+app = Flask(__name__)
 app.url_map.strict_slashes = False
-ALLOWED_ORIGINS = [
+CORS(app, resources={r"/*": {"origins": [
     "http://127.0.0.1:5500",
     "http://localhost:5500",
-    "https://kaursimar9464.github.io",   # GitHub Pages
-    "https://simarpreet-kaur.com",       # your domain (if pointed to GH Pages)
-]
-CORS(app, resources={r"/*": {"origins": ALLOWED_ORIGINS}})
+    "https://kaursimar9464.github.io",
+]}})
 
+# Keep initial scope tiny to avoid OOM/timeouts; expand later.
+LOCALES = [("en","US")]
+TOPICS  = []  # only top stories
 
-# ---------------- Config ----------------
-URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
-LANGUAGES = ["en", "fr", "es", "de", "it", "pt", "hi", "ja"]
+BOOT = {"state": "warming_up", "error": None}
+model = None
+articles = []
+corpus_embeddings = None
 
-# Locales you want (lang, region)
-LOCALES = [
-    ("en", "US"),
-    ("fr", "FR"),
-    ("es", "ES"),
-    ("de", "DE"),
-    ("it", "IT"),
-    ("pt", "BR"),
-    ("hi", "IN"),
-    ("ja", "JP"),
-]
-
-# Optional sections (empty list = only top stories)
-TOPICS = ["WORLD", "BUSINESS", "TECHNOLOGY", "SCIENCE", "HEALTH", "SPORTS", "ENTERTAINMENT", "NATION"]
-# Or do only top stories by setting: TOPICS = []
-
-# ---------------- Helpers ----------------
-def degree_centrality_scores_min(sim_matrix: np.ndarray, threshold: float | None = 0.1) -> np.ndarray:
-    S = sim_matrix.copy().astype(float)
+def degree_centrality_scores_min(S: np.ndarray, threshold: float|None=0.1) -> np.ndarray:
+    S = S.copy().astype(float)
     np.fill_diagonal(S, 0.0)
     if threshold is None:
         nz = S[S > 0]
         threshold = float(nz.mean()) if nz.size else 0.0
-    A = (S >= threshold).astype(float)
-    return A.sum(axis=1)
+    return (S >= threshold).astype(float).sum(axis=1)
 
 def gnews_top_rss(lang, region, topic=None):
-    # hl wants lang-region, ceid wants COUNTRY:lang
-    hl = f"{lang}-{region}"
-    ceid = f"{region}:{lang}"
+    hl, ceid = f"{lang}-{region}", f"{region}:{lang}"
     base = f"https://news.google.com/rss?hl={hl}&gl={region}&ceid={ceid}"
-    if topic:
-        base += f"&topic={topic}"
-    return base
+    return base + (f"&topic={topic}" if topic else "")
 
 def safe_lang(text):
     try:
@@ -109,10 +54,9 @@ def safe_lang(text):
 
 def fetch_feed(url, tag):
     try:
-        r = requests.get(url, timeout=20)
-        r.raise_for_status()
+        r = requests.get(url, timeout=12); r.raise_for_status()
     except Exception:
-        return []  # fail soft on a bad region/topic
+        return []
     feed = feedparser.parse(r.content)
     rows = []
     for e in feed.entries:
@@ -128,153 +72,118 @@ def fetch_feed(url, tag):
 def dedupe(rows):
     seen, out = set(), []
     for a in rows:
-        key = a["Url"] or hashlib.md5((a["Title"] + (a["Description"] or "")).lower().encode()).hexdigest()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(a)
+        key = a["Url"] or hashlib.md5((a["Title"] + (a.get("Description") or "")).lower().encode()).hexdigest()
+        if key in seen: continue
+        seen.add(key); out.append(a)
     return out
 
-# ---------------- Ingest feeds ----------------
-articles = []
-for lang, region in LOCALES:
-    # top stories (no topic)
-    url = gnews_top_rss(lang, region, topic=None)
-    articles += fetch_feed(url, tag=f"Top[{lang}-{region}]")
-    # sections
-    for t in TOPICS:
-        url = gnews_top_rss(lang, region, topic=t)
-        articles += fetch_feed(url, tag=f"{t}[{lang}-{region}]")
-        time.sleep(0.2)  # polite delay
-
-articles = dedupe(articles)
-
-# annotate locale + detected language
-for a in articles:
-    a["Locale"] = a["Source"].split("[")[-1].rstrip("]") if "[" in a["Source"] else ""
-    a["LangDetect"] = safe_lang(f"{a['Title']}. {a['Description']}".strip())
-    a["IngestedAt"] = datetime.now(timezone.utc).isoformat()
-
-print("Collected:", len(articles))
-if articles:
-    print(json.dumps(articles[:3], indent=2, ensure_ascii=False))
-
-# ---------------- Embeddings model ----------------
-model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
-texts = [(a["Title"] + " " + (a.get("Description") or "")).strip() for a in articles]
-corpus_embeddings = model.encode(texts, convert_to_tensor=True) if texts else None
-
-def summarize_text(text: str, max_sentences: int = 5) -> str:
-    txt = (text or "").strip()
-    if not txt:
-        return ""
-    sents = sent_tokenize(txt)
-    if len(sents) <= max_sentences:
-        return " ".join(sents)
-    sent_emb = model.encode(sents, convert_to_tensor=True)
-    sim = util.cos_sim(sent_emb, sent_emb).cpu().numpy()
+def summarize_text(text: str, max_sentences: int = 4) -> str:
+    if not text: return ""
+    s = sent_tokenize(text)
+    if len(s) <= max_sentences: return " ".join(s)
+    emb = model.encode(s, convert_to_tensor=True)
+    sim = util.cos_sim(emb, emb).cpu().numpy()
     np.fill_diagonal(sim, 0.0)
-    scores = degree_centrality_scores_min(sim, threshold=0.1)
-    top_idx = np.argsort(-scores)[:max_sentences]
-    top_idx_sorted = sorted(top_idx)
-    return " ".join(sents[i].strip() for i in top_idx_sorted)
+    idx = np.argsort(-degree_centrality_scores_min(sim, 0.1))[:max_sentences]
+    return " ".join(s[i].strip() for i in sorted(idx))
+
+def clean_news(rows):
+    out=[]
+    for r in rows:
+        t = r.get('title'); s = r.get('summary') or ""
+        s = re.sub(r'<[^>]+>', ' ', s); s = html.unescape(s)
+        s = re.sub(r'[\u00A0\u202F]+', ' ', s); s = re.sub(r'\s+', ' ', s).strip()
+        out.append({
+            'title': re.sub(r'\s+-\s+.+$', '', t or "").strip(),
+            'summary': s,
+            'summary_short': r.get('summary_short') or "",
+            'url': r.get('url'),
+            'published_at': r.get('published_at'),
+            'source': r.get('source'),
+            'lang': (r.get('lang') or "").lower(),
+            'score': r.get('score'),
+        })
+    return out
+
+def bootstrap():
+    global model, articles, corpus_embeddings, BOOT
+    try:
+        BOOT = {"state": "warming_up", "error": None}
+        model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+
+        rows=[]
+        for lang, region in LOCALES:
+            rows += fetch_feed(gnews_top_rss(lang, region, None), f"Top[{lang}-{region}]")
+            for t in TOPICS:
+                rows += fetch_feed(gnews_top_rss(lang, region, t), f"{t}[{lang}-{region}]")
+                time.sleep(0.1)
+
+        rows = dedupe(rows)
+        for a in rows:
+            a["Locale"] = a["Source"].split("[")[-1].rstrip("]") if "[" in a["Source"] else ""
+            a["LangDetect"] = safe_lang(f"{a['Title']}. {a['Description']}".strip())
+            a["IngestedAt"] = datetime.now(timezone.utc).isoformat()
+        articles = rows
+
+        texts = [(a["Title"] + " " + (a.get("Description") or "")).strip() for a in articles]
+        if texts:
+            emb = model.encode(texts, convert_to_tensor=True)
+        else:
+            emb = None
+        globals()["corpus_embeddings"] = emb
+        BOOT = {"state": "ready", "error": None}
+        print(f"[bootstrap] ready: {len(articles)} articles")
+    except Exception as e:
+        BOOT = {"state": "error", "error": str(e)}
+        print("[bootstrap] ERROR:", e)
+
+threading.Thread(target=bootstrap, daemon=True).start()
+
+@app.get("/")
+def root():
+    return jsonify({"service":"Multilingual News Explorer API","status":BOOT["state"]}), 200
+
+@app.get("/health")
+def health():
+    emb_ready = bool(getattr(corpus_embeddings, "shape", None)) if corpus_embeddings is not None else False
+    return jsonify({"status": BOOT["state"], "error": BOOT["error"], "articles": len(articles), "embeddings_ready": emb_ready}), 200
 
 def get_articles(query, lang=None, top_k=10):
     if not articles or corpus_embeddings is None:
         return []
-    query_embedding = model.encode(query, convert_to_tensor=True)
+    q = model.encode(query, convert_to_tensor=True)
     if lang:
-        idxs = [
-            i for i, a in enumerate(articles)
-            if (a.get("LangDetect") or a.get("Locale", "")).lower().startswith(lang)
-        ]
-        if not idxs:
-            return []
-        sub_articles = [articles[i] for i in idxs]
-        sub_embeddings = corpus_embeddings[idxs]
+        idxs = [i for i,a in enumerate(articles) if (a.get("LangDetect") or a.get("Locale","")).lower().startswith(lang)]
+        if not idxs: return []
+        sub = corpus_embeddings[idxs]; index_map = idxs
     else:
-        idxs = list(range(len(articles)))
-        sub_articles = articles
-        sub_embeddings = corpus_embeddings
-
-    hits = util.semantic_search(query_embedding, sub_embeddings, top_k=top_k)[0]
-    output = []
-    for hit in hits:
-        i = idxs[hit["corpus_id"]]
-        a = articles[i]
-        lang_code = (a.get("LangDetect") or a.get("Locale", "").split("-")[0]).lower()
+        sub = corpus_embeddings; index_map = list(range(len(articles)))
+    hits = util.semantic_search(q, sub, top_k=top_k)[0]
+    out=[]
+    for h in hits:
+        i = index_map[h["corpus_id"]]; a = articles[i]
+        lang_code = (a.get("LangDetect") or a.get("Locale","").split("-")[0]).lower()
         short = summarize_text(a.get("Description") or a.get("Title") or "")
-        output.append({
-            "title": a["Title"],
-            "summary": a["Description"],
-            "summary_short": short,
-            "url": a["Url"],
-            "published_at": a["PublishedAt"],
-            "source": a["Source"],
-            "lang": lang_code,
-            "score": float(hit["score"])
-        })
-    return output
-
-def clean_news(rows):
-    out = []
-    for r in rows:
-        title = r.get('title')
-        summary = r.get('summary') or ""
-        url = r.get('url')
-        published = r.get('published_at')
-        source = r.get('source')
-        short = r.get('summary_short') or ""
-        lang = (r.get('lang') or "").lower()
-        score = r.get('score')
-
-        summary = re.sub(r'<[^>]+>', ' ', summary)
-        summary = html.unescape(summary)
-        summary = re.sub(r'[\u00A0\u202F]+', ' ', summary)
-        summary = re.sub(r'\s+', ' ', summary).strip()
-
-        title_clean = re.sub(r'\s+-\s+.+$', '', title or "").strip()
         out.append({
-            'title': title_clean,
-            'summary': summary,
-            'summary_short': short,
-            'url': url,
-            'published_at': published,
-            'source': source,
-            'lang': lang,
-            'score': score,
+            "title": a["Title"], "summary": a["Description"], "summary_short": short,
+            "url": a["Url"], "published_at": a["PublishedAt"], "source": a["Source"],
+            "lang": lang_code, "score": float(h["score"])
         })
     return out
 
-# ---------------- Routes ----------------
-@app.get("/ping")
-def ping():
-    return "ok", 200
-
-@app.get("/")
-def root():
-    return send_from_directory(app.static_folder, "index.html")
-
-@app.get("/health")
-def health():
-    emb_ok = bool(getattr(corpus_embeddings, "shape", None)) if corpus_embeddings is not None else False
-    return jsonify({"articles": len(articles), "embeddings_ready": emb_ok})
-
 @app.get("/search")
 def search():
-    q = (request.args.get("q") or "").strip()
+    if BOOT["state"] != "ready":
+        return jsonify({"error":"warming_up","status":BOOT["state"]}), 503
+    q = (request.args.get("q") or "").trim()
     k = int(request.args.get("k", 10))
     lang = (request.args.get("lang") or "").lower()
-    if not q:
-        return jsonify([])
+    if not q: return jsonify([])
     try:
-        results = get_articles(q, lang=lang, top_k=k)
-        return jsonify(clean_news(results))
+        return jsonify(clean_news(get_articles(q, lang=lang, top_k=k)))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ---------------- Main ----------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
