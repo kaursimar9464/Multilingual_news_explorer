@@ -1,10 +1,22 @@
-
 flask==3.0.3
 flask-cors==4.0.0
+requests==2.32.3
 feedparser==6.0.11
 langdetect==1.0.9
-sentence-transformers==2.6.1
-torch==2.2.0
+
+# Core ML/NLP stack
+numpy>=1.26,<3
+scipy>=1.11,<2
+scikit-learn>=1.3,<2
 nltk==3.9
-requests==2.32.3
-lexrank
+
+# Sentence Transformers + friends
+sentence-transformers==2.6.1
+transformers>=4.40,<5
+huggingface-hub>=0.20,<1
+tokenizers>=0.15,<1
+torch==2.2.0  # CPU build is fine on Render
+
+# If you actually use LexRank; keep it, else remove
+lexrank==0.1.0
+networkx>=3,<4
