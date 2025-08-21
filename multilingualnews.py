@@ -25,7 +25,19 @@ CORS(app, resources={r"/*": {"origins": [
 ]}})
 
 # Keep initial scope tiny to avoid OOM/timeouts; expand later.
-LOCALES = [("en","US")]
+LOCALES = [
+    ("en","US"),
+    ("fr","FR"),
+    ("es","ES"),
+    ("de","DE"),
+    ("it","IT"),
+    ("pt","BR"),
+    ("hi","IN"),
+    ("ja","JP"),
+]
+
+# Keep LANGUAGES in sync with LOCALES
+LANGUAGES = sorted({lang for (lang, _) in LOCALES})
 TOPICS  = []  # only top stories
 
 BOOT = {"state": "warming_up", "error": None}
