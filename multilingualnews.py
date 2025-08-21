@@ -22,7 +22,8 @@ from langdetect import detect, LangDetectException
 
 from sentence_transformers import SentenceTransformer, util
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+import os
 from flask_cors import CORS
 for pkg in ("punkt", "punkt_tab"):
     try:
@@ -33,7 +34,7 @@ for pkg in ("punkt", "punkt_tab"):
 URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
 languages = ["en","fr","es","de","it","pt", "hi", "ja"]
 import numpy as np
-
+app = Flask(__name__, static_folder = 'static')
 def degree_centrality_scores_min(sim_matrix: np.ndarray, threshold: float | None = 0.1) -> np.ndarray:
     """
     Compute degree centrality on a similarity graph:
@@ -248,6 +249,10 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 def ping():
     return "ok", 200
 
+@app.get("/")
+def root():
+    return send_from_directory(app.static_folder, "index.html")
+
 @app.get("/health")
 def health():
     try:
@@ -275,5 +280,4 @@ def search():
 
 
 if __name__ == "__main__":
-    # Fixed local port; use this in your HTML as ENDPOINT
-    app.run(host="127.0.0.1", port=5000, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True, threaded=True)

@@ -1,0 +1,10 @@
+pip freeze > requirements.txt
+flask
+flask-cors
+feedparser
+langdetect
+sentence-transformers
+torch
+requests
+nltk
+numpy
