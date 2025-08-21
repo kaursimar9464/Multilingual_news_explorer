@@ -175,7 +175,7 @@ def get_articles(query, lang=None, top_k=10):
 def search():
     if BOOT["state"] != "ready":
         return jsonify({"error":"warming_up","status":BOOT["state"]}), 503
-    q = (request.args.get("q") or "").trim()
+    q = (request.args.get("q") or "").strip()
     k = int(request.args.get("k", 10))
     lang = (request.args.get("lang") or "").lower()
     if not q: return jsonify([])
