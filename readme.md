@@ -1,4 +1,4 @@
-# 🌍 Multilingual News Explorer
+# Multilingual News Explorer
 
 Cross-lingual semantic search + concise summaries over global Google News feeds.
 
@@ -10,7 +10,7 @@ API (auto-used by the UI): https://multilingualnews.fly.dev
 ## What it does
 
 - **Search in your language, read in any language.**  
-  Type a query (e.g., “AI transparency rules”) and the app finds relevant news across locales.
+  Type a query (e.g., “Stock Market”) and the app finds relevant news across locales.
 - **Short, readable summaries.**  
   Each result includes a 2–5 sentence extractive brief.
 - **Language filter.**  
@@ -43,18 +43,3 @@ API (auto-used by the UI): https://multilingualnews.fly.dev
 - **Privacy:** No accounts. Queries are sent to the hosted API only to compute results; no personal data is stored.
 
 ---
-
-## Feedback & Issues
-
-Bug report or feature idea? Open an issue in this repo—include your query, selected language, and a screenshot if possible.
-
----
-
-## For developers (optional)
-
-- UI: static site (Tailwind) on GitHub Pages, points to the Fly.io Flask API.
-- API endpoints:
-  - `GET /health` → `{ articles, embeddings_ready }`
-  - `GET /search?q=<query>&k=<int>&lang=<code>` → ranked results with `summary_short`
-
-> You don’t need any of this to use the app—just visit the live link above.
