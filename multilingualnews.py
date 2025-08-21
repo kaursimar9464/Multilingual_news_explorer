@@ -2,20 +2,9 @@
 # API-only: UI is on GitHub Pages.
 
 import os, json, re, html, time, threading, hashlib
-from datetime import datetime, timezone
-
-import numpy as np
-import requests, feedparser, nltk
-from nltk.tokenize import sent_tokenize
-from langdetect import detect, LangDetectException
-from sentence_transformers import SentenceTransformer, util
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-
 NLTK_DIR = os.environ.get("NLTK_DATA", "/usr/share/nltk_data")
 os.environ["NLTK_DATA"] = NLTK_DIR
 os.makedirs(NLTK_DIR, exist_ok=True)
-
 import nltk
 nltk.data.path = [NLTK_DIR] + nltk.data.path
 
@@ -27,6 +16,19 @@ for pkg in _needed:
         nltk.data.find(f"{subdir}/{pkg}")
     except LookupError:
         nltk.download(pkg, download_dir=NLTK_DIR)
+from datetime import datetime, timezone
+
+import numpy as np
+import requests, feedparser, nltk
+from nltk.tokenize import sent_tokenize
+from langdetect import detect, LangDetectException
+from sentence_transformers import SentenceTransformer, util
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+
+
+
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 CORS(app, resources={r"/*": {"origins": [
