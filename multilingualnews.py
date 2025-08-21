@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from lexrank import LexRank
 import nltk
+import os
 nltk.download("punkt")      
 nltk.download("punkt_tab")  
 from nltk.tokenize import sent_tokenize
@@ -23,13 +24,18 @@ from langdetect import detect, LangDetectException
 from sentence_transformers import SentenceTransformer, util
 
 from flask import Flask, request, jsonify, send_from_directory
-import os
+
 from flask_cors import CORS
-for pkg in ("punkt", "punkt_tab"):
+NLTK_DIR = os.environ.get("NLTK_DATA", "/opt/render/nltk_data")
+os.makedirs(NLTK_DIR, exist_ok=True)
+nltk.data.path.append(NLTK_DIR)
+
+# Download only if missing (keeps boots fast after first run)
+for pkg in ["wordnet", "omw-1.4", "punkt", "stopwords"]:
     try:
-        nltk.data.find(f"tokenizers/{pkg}")
+        nltk.data.find(f"corpora/{pkg}")
     except LookupError:
-        nltk.download(pkg)
+        nltk.download(pkg, download_dir=NLTK_DIR)
 
 URL = "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"
 languages = ["en","fr","es","de","it","pt", "hi", "ja"]
