@@ -3,5 +3,16 @@ __pycache__/
 .DS_Store
 venv/
 .env
-*.egg-info/
 nltk_data/
+cache/
+hf_home/
+transformers_cache/
+sentence_transformers/
+models/
+*.pt
+*.bin
+*.ckpt
+*.whl
+node_modules/
+dist/
+build/

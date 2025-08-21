@@ -1,10 +1,8 @@
-pip freeze > requirements.txt
-flask
-flask-cors
-feedparser
-langdetect
-sentence-transformers
-torch
-requests
-nltk
-numpy
+flask==3.0.3
+flask-cors==4.0.0
+feedparser==6.0.11
+langdetect==1.0.9
+sentence-transformers==2.6.1
+torch==2.2.0
+nltk==3.9
+requests==2.32.3
