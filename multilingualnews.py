@@ -13,9 +13,20 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 NLTK_DIR = os.environ.get("NLTK_DATA", "/usr/share/nltk_data")
+os.environ["NLTK_DATA"] = NLTK_DIR
 os.makedirs(NLTK_DIR, exist_ok=True)
-nltk.data.path.append(NLTK_DIR)
 
+import nltk
+nltk.data.path = [NLTK_DIR] + nltk.data.path
+
+# Make sure required resources exist; download if missing
+_needed = ["punkt", "wordnet", "omw-1.4", "stopwords"]
+for pkg in _needed:
+    try:
+        subdir = "tokenizers" if pkg == "punkt" else "corpora"
+        nltk.data.find(f"{subdir}/{pkg}")
+    except LookupError:
+        nltk.download(pkg, download_dir=NLTK_DIR)
 app = Flask(__name__)
 app.url_map.strict_slashes = False
 CORS(app, resources={r"/*": {"origins": [

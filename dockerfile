@@ -21,8 +21,17 @@ RUN python -m pip install --upgrade "pip<24" && \
     pip install --no-cache-dir -r requirements.txt && \
     pip check
 
+
 # app code
-COPY . .
+COPY . . 
+
+ENV NLTK_DATA=/usr/share/nltk_data
+RUN python - <<'PY'
+import nltk
+for p in ['punkt','wordnet','omw-1.4','stopwords']:
+    nltk.download(p, download_dir='/usr/share/nltk_data')
+print("nltk predownload done")
+PY
 
 # fly.io expects something listening on 8080
 ENV PORT=8080
