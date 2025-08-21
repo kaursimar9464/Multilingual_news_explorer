@@ -3,23 +3,13 @@ flask-cors==4.0.0
 requests==2.32.3
 feedparser==6.0.11
 langdetect==1.0.9
-
-# Core ML/NLP stack
-numpy>=1.26,<2          # ⬅️ changed (<2 to avoid NumPy 2.x)
+numpy>=1.26,<3
 scipy>=1.11,<2
 scikit-learn>=1.3,<2
 nltk==3.8.1
-
-# Sentence Transformers + friends
 sentence-transformers==2.6.1
 transformers>=4.40,<5
 huggingface-hub>=0.20,<1
 tokenizers>=0.15,<1
-torch==2.2.0  # CPU
-
-# If you actually use LexRank; keep it, else remove
-lexrank==0.1.0
-networkx>=3,<4
-
-# Production WSGI server
-gunicorn>=21,<22        # ⬅️ added
+torch==2.2.0
+gunicorn==21.2.0

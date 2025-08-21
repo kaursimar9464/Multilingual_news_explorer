@@ -1,28 +1,36 @@
-# Python + NLTK corpora without importing nltk at build
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     NLTK_DATA=/usr/share/nltk_data \
-    PORT=8080 \
-    PIP_NO_CACHE_DIR=1
+    HF_HOME=/root/.cache/huggingface \
+    TRANSFORMERS_CACHE=/root/.cache/huggingface \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    NUMEXPR_MAX_THREADS=1 \
+    TOKENIZERS_PARALLELISM=false
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Fetch NLTK corpora (no nltk import)
-RUN mkdir -p $NLTK_DATA/corpora $NLTK_DATA/tokenizers && \
-    curl -L -o $NLTK_DATA/corpora/wordnet.zip   https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/wordnet.zip && \
-    curl -L -o $NLTK_DATA/corpora/omw-1.4.zip   https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/omw-1.4.zip && \
-    curl -L -o $NLTK_DATA/tokenizers/punkt.zip  https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/tokenizers/punkt.zip && \
-    curl -L -o $NLTK_DATA/corpora/stopwords.zip https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/stopwords.zip
+# Preload NLTK corpora at build-time (no runtime downloads)
+RUN python - <<'PY'
+import nltk
+for pkg in ["wordnet", "omw-1.4", "punkt", "stopwords"]:
+    nltk.download(pkg, download_dir="/usr/share/nltk_data")
+PY
 
-COPY . /app
+# Prefetch the SBERT model into the image (no runtime HF download)
+RUN python - <<'PY'
+from sentence_transformers import SentenceTransformer
+SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+PY
 
-# Use gunicorn in production
-RUN pip install gunicorn
-CMD exec gunicorn multilingualnews:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120
+COPY . .
+EXPOSE 8080
+
+# SINGLE small worker to avoid OOM
+CMD ["gunicorn","multilingualnews:app","--bind","0.0.0.0:8080","--workers","1","--threads","2","--timeout","120"]
