@@ -1,36 +1,29 @@
 FROM python:3.11-slim
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    NLTK_DATA=/usr/share/nltk_data \
-    HF_HOME=/root/.cache/huggingface \
-    TRANSFORMERS_CACHE=/root/.cache/huggingface \
     OMP_NUM_THREADS=1 \
     MKL_NUM_THREADS=1 \
-    NUMEXPR_MAX_THREADS=1 \
-    TOKENIZERS_PARALLELISM=false
-
-RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ wget && rm -rf /var/lib/apt/lists/*
+    HF_HOME=/app/.cache/huggingface \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface
 
 WORKDIR /app
+
+# install system essentials (certs + tz)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+# install Python deps
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade "pip<24" && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip check
 
-# Preload NLTK corpora at build-time (no runtime downloads)
-RUN python - <<'PY'
-import nltk
-for pkg in ["wordnet", "omw-1.4", "punkt", "stopwords"]:
-    nltk.download(pkg, download_dir="/usr/share/nltk_data")
-PY
-
-# Prefetch the SBERT model into the image (no runtime HF download)
-RUN python - <<'PY'
-from sentence_transformers import SentenceTransformer
-SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-PY
-
+# app code
 COPY . .
-EXPOSE 8080
 
-# SINGLE small worker to avoid OOM
-CMD ["gunicorn","multilingualnews:app","--bind","0.0.0.0:8080","--workers","1","--threads","2","--timeout","120"]
+# fly.io expects something listening on 8080
+ENV PORT=8080
+CMD ["gunicorn", "-w", "1", "-k", "gthread", "--threads", "2", "--timeout", "120", "--bind", "0.0.0.0:8080", "multilingualnews:app"]
