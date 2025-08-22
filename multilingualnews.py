@@ -37,12 +37,12 @@ def clean_text(s: str) -> str:
     return s
 
 def detect_lang_confident(text: str):
-    """Return (lang, prob). Only useful if text is long & cleaned."""
+    
     text = clean_text(text)
     if len(text) < 25:
         return (None, 0.0)
     try:
-        candidates = detect_langs(text)  # e.g. [en:0.88, fr:0.11]
+        candidates = detect_langs(text) 
         if not candidates:
             return (None, 0.0)
         best = max(candidates, key=lambda c: c.prob)
@@ -51,26 +51,20 @@ def detect_lang_confident(text: str):
         return (None, 0.0)
 
 def infer_lang(a: dict) -> str:
-    """
-    Prefer the feed locale (hl/gl) and only override if detector is VERY confident
-    and disagrees. This prevents FR/ES items from being mislabeled 'en'.
-    """
-    # 1) Locale from feed tag like "Top[fr-FR]"
+    
+   
     loc = (a.get("Locale") or "").split("-")[0].lower()
     loc_valid = loc in LANG_WHITELIST
 
-    # 2) Detect on title-only (cleaner) as primary; fall back to title+desc
     title = clean_text(a.get("Title") or "")
     desc  = clean_text(a.get("Description") or "")
     det_lang, prob = detect_lang_confident(title if title else f"{title}. {desc}")
 
     if loc_valid:
-        # Only override locale if detector is VERY confident and different
         if det_lang and det_lang != loc and prob >= 0.92:
             return det_lang
         return loc
 
-    # No valid locale: use detector (or default 'en' as last resort)
     return det_lang or "en"
 
 
@@ -96,7 +90,7 @@ LOCALES = [
 
 
 LANGUAGES = sorted({lang for (lang, _) in LOCALES})
-TOPICS  = [] 
+TOPICS = ["WORLD","BUSINESS","TECHNOLOGY","SCIENCE","HEALTH","SPORTS","ENTERTAINMENT","NATION"]
 
 BOOT = {"state": "warming_up", "error": None}
 model = None
@@ -222,10 +216,8 @@ def get_articles(query, lang=None, top_k=10):
     if not articles or corpus_embeddings is None:
         return []
 
-    # Encode query
     q_emb = model.encode(query, convert_to_tensor=True)
 
-    # Pick subset by language (if any)
     if lang:
         idxs = [i for i, a in enumerate(articles) if (a.get("Lang") or "").lower() == lang]
         if not idxs:
@@ -235,13 +227,12 @@ def get_articles(query, lang=None, top_k=10):
         idxs = list(range(len(articles)))
         sub_embeddings = corpus_embeddings
 
-    # Semantic search on the selected subset
     hits = util.semantic_search(q_emb, sub_embeddings, top_k=top_k)[0]
 
-    # Map hits back to global article indices and build response
+    
     out = []
     for h in hits:
-        i = idxs[h["corpus_id"]]      # map subset index -> global index
+        i = idxs[h["corpus_id"]]     
         a = articles[i]
         lang_code = (a.get("Lang") or "").lower()
         short = summarize_text(a.get("Description") or a.get("Title") or "")
