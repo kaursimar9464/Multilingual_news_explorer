@@ -20,12 +20,58 @@ from datetime import datetime, timezone
 import numpy as np
 import requests, feedparser, nltk
 from nltk.tokenize import sent_tokenize
-from langdetect import detect, LangDetectException
+from langdetect import detect, LangDetectException, detect_langs
 from sentence_transformers import SentenceTransformer, util
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+LANG_WHITELIST = {"en","fr","es","de","it","pt","hi","ja"}
 
+def clean_text(s: str) -> str:
+    if not s:
+        return ""
+    s = re.sub(r"<[^>]+>", " ", s)
+    s = html.unescape(s)
+    s = re.sub(r"[\u00A0\u202F]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def detect_lang_confident(text: str):
+    """Return (lang, prob). Only useful if text is long & cleaned."""
+    text = clean_text(text)
+    if len(text) < 25:
+        return (None, 0.0)
+    try:
+        candidates = detect_langs(text)  # e.g. [en:0.88, fr:0.11]
+        if not candidates:
+            return (None, 0.0)
+        best = max(candidates, key=lambda c: c.prob)
+        return (best.lang, float(best.prob))
+    except LangDetectException:
+        return (None, 0.0)
+
+def infer_lang(a: dict) -> str:
+    """
+    Prefer the feed locale (hl/gl) and only override if detector is VERY confident
+    and disagrees. This prevents FR/ES items from being mislabeled 'en'.
+    """
+    # 1) Locale from feed tag like "Top[fr-FR]"
+    loc = (a.get("Locale") or "").split("-")[0].lower()
+    loc_valid = loc in LANG_WHITELIST
+
+    # 2) Detect on title-only (cleaner) as primary; fall back to title+desc
+    title = clean_text(a.get("Title") or "")
+    desc  = clean_text(a.get("Description") or "")
+    det_lang, prob = detect_lang_confident(title if title else f"{title}. {desc}")
+
+    if loc_valid:
+        # Only override locale if detector is VERY confident and different
+        if det_lang and det_lang != loc and prob >= 0.92:
+            return det_lang
+        return loc
+
+    # No valid locale: use detector (or default 'en' as last resort)
+    return det_lang or "en"
 
 
 app = Flask(__name__)
@@ -145,7 +191,7 @@ def bootstrap():
         rows = dedupe(rows)
         for a in rows:
             a["Locale"] = a["Source"].split("[")[-1].rstrip("]") if "[" in a["Source"] else ""
-            a["LangDetect"] = safe_lang(f"{a['Title']}. {a['Description']}".strip())
+            a["Lang"] = infer_lang(a)
             a["IngestedAt"] = datetime.now(timezone.utc).isoformat()
         articles = rows
 
@@ -177,16 +223,18 @@ def get_articles(query, lang=None, top_k=10):
         return []
     q = model.encode(query, convert_to_tensor=True)
     if lang:
-        idxs = [i for i,a in enumerate(articles) if (a.get("LangDetect") or a.get("Locale","")).lower().startswith(lang)]
-        if not idxs: return []
-        sub = corpus_embeddings[idxs]; index_map = idxs
+        idxs = [i for i, a in enumerate(articles) if (a.get("Lang") or "").lower() == lang]
+        if not idxs:
+            return []
+        sub_embeddings = corpus_embeddings[idxs]
     else:
-        sub = corpus_embeddings; index_map = list(range(len(articles)))
+        idxs = list(range(len(articles)))
+        sub_embeddings = corpus_embeddings
     hits = util.semantic_search(q, sub, top_k=top_k)[0]
     out=[]
     for h in hits:
         i = index_map[h["corpus_id"]]; a = articles[i]
-        lang_code = (a.get("LangDetect") or a.get("Locale","").split("-")[0]).lower()
+        lang_code = (a.get("Lang") or "").lower()
         short = summarize_text(a.get("Description") or a.get("Title") or "")
         out.append({
             "title": a["Title"], "summary": a["Description"], "summary_short": short,
