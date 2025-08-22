@@ -221,7 +221,11 @@ def health():
 def get_articles(query, lang=None, top_k=10):
     if not articles or corpus_embeddings is None:
         return []
-    q = model.encode(query, convert_to_tensor=True)
+
+    # Encode query
+    q_emb = model.encode(query, convert_to_tensor=True)
+
+    # Pick subset by language (if any)
     if lang:
         idxs = [i for i, a in enumerate(articles) if (a.get("Lang") or "").lower() == lang]
         if not idxs:
@@ -230,18 +234,29 @@ def get_articles(query, lang=None, top_k=10):
     else:
         idxs = list(range(len(articles)))
         sub_embeddings = corpus_embeddings
-    hits = util.semantic_search(q, sub, top_k=top_k)[0]
-    out=[]
+
+    # Semantic search on the selected subset
+    hits = util.semantic_search(q_emb, sub_embeddings, top_k=top_k)[0]
+
+    # Map hits back to global article indices and build response
+    out = []
     for h in hits:
-        i = index_map[h["corpus_id"]]; a = articles[i]
+        i = idxs[h["corpus_id"]]      # map subset index -> global index
+        a = articles[i]
         lang_code = (a.get("Lang") or "").lower()
         short = summarize_text(a.get("Description") or a.get("Title") or "")
         out.append({
-            "title": a["Title"], "summary": a["Description"], "summary_short": short,
-            "url": a["Url"], "published_at": a["PublishedAt"], "source": a["Source"],
-            "lang": lang_code, "score": float(h["score"])
+            "title": a["Title"],
+            "summary": a["Description"],
+            "summary_short": short,
+            "url": a["Url"],
+            "published_at": a["PublishedAt"],
+            "source": a["Source"],
+            "lang": lang_code,
+            "score": float(h["score"]),
         })
     return out
+
 
 @app.get("/search")
 def search():
