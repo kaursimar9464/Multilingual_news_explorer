@@ -11,7 +11,7 @@ Cross-lingual semantic search + concise summaries over global Google News feeds.
 - **Search in your language, read in any language.**  
   Type a query (e.g., “Stock Market”) and the app finds relevant news across locales.
 - **Short, readable summaries.**  
-  Each result includes a 2–5 sentence extractive brief.
+  Each result includes an extractive brief.
 - **Language filter.**  
   Narrow results to a specific language when you want.
 
