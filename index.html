@@ -228,8 +228,8 @@
         }
         data = await res.json();
       }
-      lastResults = Array.isArray(data) ? data : [];  // ⬅ store results
-      applyFilter(); // ⬅ render with filter
+      lastResults = Array.isArray(data) ? data : [];  // store results
+      applyFilter(); // render with filter
       statusEl.textContent = `Found ${lastResults.length} result(s).`;
     }catch(err){
       logDbg("[search] error", err && (err.stack || err));
@@ -251,7 +251,7 @@
   btn.addEventListener("click", searchNews);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") searchNews(); });
   checkBtn.addEventListener("click", checkConnection);
-  langFilter.addEventListener("change", applyFilter); // ⬅ NEW
+  langFilter.addEventListener("change", applyFilter); 
 </script>
 
 </body>

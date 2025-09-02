@@ -6,15 +6,12 @@ feedparser==6.0.11
 langdetect==1.0.9
 gunicorn==21.2.0
 
-# Core numerics (pin numpy below 2.0!)
 numpy==1.26.4
 
-# ML / NLP
 torch==2.2.0
 sentence-transformers==2.6.1
 transformers>=4.40,<5
 nltk==3.8.1
 
-# If you truly use LexRank, keep it; otherwise remove.
 lexrank==0.1.0
 networkx>=3,<4
