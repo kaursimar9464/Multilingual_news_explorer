@@ -3,7 +3,6 @@
 Cross-lingual semantic search + concise summaries over global Google News feeds.
 
 **Try it online: https://kaursimar9464.github.io/Multilingual_news_explorer/**  
-API (auto-used by the UI): https://multilingualnews.fly.dev
 
 ---
 
