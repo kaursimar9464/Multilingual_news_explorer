@@ -2,14 +2,14 @@
 
 Cross-lingual semantic search + concise summaries over global Google News feeds.
 
-**Try it online: https://kaursimar9464.github.io/Multilingual_news_explorer/**  
+**Try it online: https://kaursimar9464.github.io/Multilingual_news_explorer/**
 
 ---
 
 ## What it does
 
 - **Search in your language, read in any language.**  
-  Type a query (e.g., “Stock Market”) and the app finds relevant news across locales.
+  Type a query (e.g., “Impact of tariffs”) and the app finds relevant news across locales.
 - **Short, readable summaries.**  
   Each result includes an extractive brief.
 - **Language filter.**  
